@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Punch</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#111214">
+<style>
+  :root {
+    --bg: #f6f6f7;
+    --card: #ffffff;
+    --text: #16171a;
+    --muted: #75787e;
+    --line: #e3e4e7;
+    --accent: #6b7280;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111214; --card: #191b1e; --text: #f2f3f5; --muted: #8b8f96; --line: #26282c; }
+  }
+  body.working { --accent: #16a34a; }
+  body.break   { --accent: #d97706; }
+  @media (prefers-color-scheme: dark) {
+    body.working { --accent: #22c55e; }
+    body.break   { --accent: #f59e0b; }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: max(16px, env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom));
+    max-width: 480px;
+    margin-inline: auto;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 22px 20px;
+  }
+
+  .top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+  .date { font-size: 15px; color: var(--muted); }
+  .status { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--accent); font-weight: 600; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+  body.working .dot { animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+
+  .net {
+    font: 600 46px/1.1 ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    letter-spacing: -1.5px;
+    font-variant-numeric: tabular-nums;
+  }
+  .sub { margin-top: 10px; display: flex; gap: 18px; font-size: 14px; color: var(--muted); }
+  .sub b { font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+
+  .actions { display: grid; gap: 10px; margin-top: 22px; }
+  button {
+    font: inherit;
+    font-weight: 600;
+    border-radius: 14px;
+    padding: 16px;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    transition: transform .08s;
+  }
+  button:active { transform: scale(.98); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 30px 0 8px 4px; }
+
+  details { border-bottom: 1px solid var(--line); }
+  summary {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+    padding: 14px 4px; cursor: pointer; list-style: none;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary .d { font-weight: 500; }
+  summary .n { font-variant-numeric: tabular-nums; font-weight: 600; }
+  summary .g { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .evs { padding: 2px 4px 14px; display: grid; gap: 2px; }
+  .ev {
+    display: flex; gap: 12px; align-items: center; width: 100%;
+    background: none; border: 0; padding: 9px 8px; border-radius: 10px;
+    font-size: 14px; color: var(--muted); text-align: left; font-weight: 400;
+  }
+  .ev:hover { background: var(--bg); }
+  .ev time { font-variant-numeric: tabular-nums; color: var(--text); font-weight: 600; min-width: 52px; }
+  .ev .pen { margin-left: auto; opacity: .45; font-size: 12px; }
+
+  .empty { color: var(--muted); font-size: 14px; padding: 14px 4px; }
+
+  .tools { display: flex; gap: 10px; margin-top: 28px; }
+  .tools button { flex: 1; padding: 11px; font-size: 13px; font-weight: 500; color: var(--muted); }
+
+  dialog {
+    border: 0; border-radius: 18px; padding: 20px; width: min(340px, calc(100vw - 32px));
+    background: var(--card); color: var(--text);
+  }
+  dialog::backdrop { background: #000a; }
+  dialog h3 { margin: 0 0 14px; font-size: 16px; }
+  dialog input {
+    font: inherit; width: 100%; padding: 12px; border-radius: 12px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--text);
+  }
+  .row { display: flex; gap: 10px; margin-top: 16px; }
+  .row button { flex: 1; padding: 13px; }
+  .danger { color: #dc2626; border-color: #dc262633; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="top">
+    <span class="date" id="date"></span>
+    <span class="status"><span class="dot"></span><span id="stateLabel"></span></span>
+  </div>
+  <div class="net" id="net">0h 00m</div>
+  <div class="sub">
+    <span>in office <b id="gross">0h 00m</b></span>
+    <span>breaks <b id="breaks">0h 00m</b></span>
+  </div>
+  <div class="actions" id="actions"></div>
+</div>
+
+<h2>History</h2>
+<div id="history"></div>
+
+<div class="tools">
+  <button id="export">Export backup</button>
+  <button id="import">Import</button>
+</div>
+
+<dialog id="editor">
+  <h3 id="editorTitle">Edit time</h3>
+  <input type="datetime-local" id="editorInput">
+  <div class="row">
+    <button class="danger" id="editorDelete">Delete</button>
+    <button id="editorCancel">Cancel</button>
+    <button class="primary" id="editorSave">Save</button>
+  </div>
+</dialog>
+
+<script type="module">
+import { shifts, totals, nextActions, state, fmt, dayKey, KINDS } from './punch.js';
+
+const KEY = 'punch.events';
+const LABEL = { in: 'Punch In', bin: 'Break In', bout: 'Break Out', out: 'Punch Out' };
+const STATE_TEXT = { working: 'Working', break: 'On break', off: 'Punched out' };
+const $ = (id) => document.getElementById(id);
+
+const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) ?? []; } catch { return []; } };
+const save = (evs) => {
+  events = [...evs].sort((a, b) => a.t - b.t);
+  localStorage.setItem(KEY, JSON.stringify(events));
+  render();
+};
+
+let events = load();
+let ticker = null;
+
+const clock = (t) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+const dayName = (t) => new Date(t).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+
+// datetime-local wants a local "yyyy-MM-ddTHH:mm" string, not an ISO/UTC one.
+const toInput = (t) => new Date(t - new Date(t).getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+
+function render() {
+  const all = shifts(events);
+  const last = events.length ? events[events.length - 1].k : null;
+  const st = state(last);
+  document.body.className = st;
+  $('stateLabel').textContent = STATE_TEXT[st];
+
+  // Top card shows the newest shift while it is open or started today; else today, empty.
+  const current = all[0] && (totals(all[0]).open || all[0].date === dayKey(Date.now())) ? all[0] : null;
+  $('date').textContent = dayName(current ? current.start : Date.now());
+
+  $('actions').replaceChildren(...nextActions(last).map((k, i) => {
+    const b = document.createElement('button');
+    b.textContent = LABEL[k];
+    b.className = i === 0 ? 'primary' : '';
+    b.onclick = () => save([...events, { t: Date.now(), k }]);
+    return b;
+  }));
+
+  renderHistory(current ? all.slice(1) : all);
+  tick(current);
+
+  clearInterval(ticker);
+  ticker = current && totals(current).open ? setInterval(() => tick(current), 1000) : null;
+}
+
+function tick(current) {
+  const r = current ? totals(current) : { gross: 0, breaks: 0, net: 0 };
+  $('net').textContent = fmt(r.net);
+  $('gross').textContent = fmt(r.gross);
+  $('breaks').textContent = fmt(r.breaks);
+}
+
+function renderHistory(past) {
+  const host = $('history');
+  if (!past.length) {
+    host.innerHTML = '<div class="empty">No earlier days yet.</div>';
+    return;
+  }
+  host.replaceChildren(...past.map((s) => {
+    const r = totals(s);
+    const d = document.createElement('details');
+    d.innerHTML = `<summary>
+        <span class="d">${dayName(s.start)}</span>
+        <span><span class="n">${fmt(r.net)}</span> <span class="g">/ ${fmt(r.gross)}</span></span>
+      </summary>`;
+    const evs = document.createElement('div');
+    evs.className = 'evs';
+    evs.replaceChildren(...s.events.map((e) => {
+      const b = document.createElement('button');
+      b.className = 'ev';
+      b.innerHTML = `<time>${clock(e.t)}</time><span>${KINDS[e.k]}</span><span class="pen">edit</span>`;
+      b.onclick = () => edit(e);
+      return b;
+    }));
+    d.append(evs);
+    return d;
+  }));
+}
+
+function edit(ev) {
+  const dlg = $('editor');
+  $('editorTitle').textContent = KINDS[ev.k];
+  $('editorInput').value = toInput(ev.t);
+  $('editorSave').onclick = () => {
+    const t = new Date($('editorInput').value).getTime();
+    if (!Number.isNaN(t)) { ev.t = t; save(events); }
+    dlg.close();
+  };
+  $('editorDelete').onclick = () => {
+    save(events.filter((x) => x !== ev));
+    dlg.close();
+  };
+  $('editorCancel').onclick = () => dlg.close();
+  dlg.showModal();
+}
+
+$('export').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(events)], { type: 'application/json' }));
+  a.download = `punch-${dayKey(Date.now())}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+
+$('import').onclick = () => {
+  const f = document.createElement('input');
+  f.type = 'file';
+  f.accept = 'application/json';
+  f.onchange = async () => {
+    const incoming = JSON.parse(await f.files[0].text());
+    if (!Array.isArray(incoming) || !incoming.every((e) => typeof e?.t === 'number' && e.k in KINDS)) {
+      return alert('Not a punch backup file.');
+    }
+    if (!confirm(`Replace ${events.length} events with ${incoming.length} from the backup?`)) return;
+    events = incoming;
+    save(events);
+  };
+  f.click();
+};
+
+render();
+navigator.storage?.persist?.();          // ask Chrome not to evict the log
+navigator.serviceWorker?.register('sw.js');
+</script>
+</body>
+</html>
