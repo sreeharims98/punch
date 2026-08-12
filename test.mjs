@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { shifts, totals, nextActions, state, fmt, dayKey, inRange } from './punch.js';
+import { shifts, totals, nextActions, state, fmt, dayKey, toCSV, fromCSV, toRows, fromRows } from './punch.js';
 
 const H = 3600000;
 const M = 60000;
@@ -97,22 +97,6 @@ assert.equal(state('in'), 'working');
 assert.equal(state('bout'), 'working');
 assert.equal(state('bin'), 'break');
 
-// --- date-range filter -------------------------------------------------------
-{
-  const all = shifts([
-    { t: at(10, 9), k: 'in' }, { t: at(10, 17), k: 'out' },
-    { t: at(11, 9), k: 'in' }, { t: at(11, 17), k: 'out' },
-    { t: at(12, 9), k: 'in' }, { t: at(12, 17), k: 'out' },
-  ]);
-  const days = (list) => list.map((s) => s.date);
-
-  assert.deepEqual(days(inRange(all, '', '')), ['2026-08-12', '2026-08-11', '2026-08-10']);
-  assert.deepEqual(days(inRange(all, '2026-08-11', '2026-08-11')), ['2026-08-11']);
-  assert.deepEqual(days(inRange(all, '2026-08-11', '')), ['2026-08-12', '2026-08-11']);
-  assert.deepEqual(days(inRange(all, '', '2026-08-11')), ['2026-08-11', '2026-08-10']);
-  assert.deepEqual(inRange(all, '2026-09-01', ''), []);
-}
-
 // --- backfilling a forgotten punch-out closes the stale shift -----------------
 {
   const log = [
@@ -138,5 +122,58 @@ assert.equal(fmt(-5), '0h 00m');
 assert.equal(fmt(8 * H + 5 * M), '8h 05m');
 assert.equal(fmt(90 * M), '1h 30m');
 assert.equal(dayKey(at(3, 10)), '2026-08-03');
+
+// --- CSV ---------------------------------------------------------------------
+{
+  const log = [
+    { t: at(10, 9, 3), k: 'in' },
+    { t: at(10, 11, 20), k: 'bin' },
+    { t: at(10, 11, 45), k: 'bout' },
+    { t: at(10, 18), k: 'out' },
+  ];
+  const csv = toCSV(log);
+  assert.deepEqual(csv.split('\n'), [
+    'Date,Time,Action',
+    '2026-08-10,09:03,Punch in',
+    '2026-08-10,11:20,Break in',
+    '2026-08-10,11:45,Break out',
+    '2026-08-10,18:00,Punch out',
+  ]);
+  assert.deepEqual(fromCSV(csv), log);            // round-trip, minute-aligned input
+  assert.deepEqual(fromCSV(toCSV([...log].reverse())), log); // export sorts
+
+  // seconds are the known casualty of the minute-resolution format
+  assert.deepEqual(fromCSV(toCSV([{ t: at(10, 9, 3) + 42000, k: 'in' }])), [{ t: at(10, 9, 3), k: 'in' }]);
+}
+
+assert.deepEqual(toCSV([]), 'Date,Time,Action');
+assert.deepEqual(fromCSV('Date,Time,Action'), []);
+assert.deepEqual(fromCSV('Date,Time,Action\r\n2026-08-10,09:03,Punch in\r\n'), [{ t: at(10, 9, 3), k: 'in' }]);
+assert.deepEqual(fromCSV('2026-08-10,09:03,Punch in'), [{ t: at(10, 9, 3), k: 'in' }]); // header optional
+
+// one bad row rejects the whole file — a half-parsed log is worse than no import
+assert.equal(fromCSV('Date,Time,Action\n2026-08-10,09:03,Lunch'), null);      // unknown action
+assert.equal(fromCSV('Date,Time,Action\n10/08/2026,09:03,Punch in'), null);   // wrong date format
+assert.equal(fromCSV('Date,Time,Action\n2026-08-10,9:03,Punch in'), null);    // unpadded hour
+assert.equal(fromCSV('nonsense'), null);
+
+// --- sheet rows (Google Sheets values API) -----------------------------------
+{
+  const log = [
+    { t: at(10, 9, 3), k: 'in' },
+    { t: at(10, 18), k: 'out' },
+  ];
+  const rows = toRows(log);
+  assert.deepEqual(rows[0], ['Date', 'Time', 'Action']);
+  assert.deepEqual(rows[1], ['2026-08-10', '09:03', 'Punch in']);
+  assert.equal(rows.length, log.length + 1);
+  assert.deepEqual(fromRows(rows), log);
+}
+
+// a hand-edited sheet is untrusted input: reject the lot, never half-import
+assert.equal(fromRows([['Date', 'Time', 'Action'], ['2026-08-10', '09:03', 'Lunch']]), null);
+assert.equal(fromRows([['Date', 'Time', 'Action'], ['yesterday', 'morning', 'Punch in']]), null);
+assert.deepEqual(fromRows([]), []);          // fresh sheet
+assert.deepEqual(fromRows(undefined), []);   // values API omits the key entirely when empty
 
 console.log('ok');

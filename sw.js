@@ -1,4 +1,4 @@
-const CACHE = 'punch-v2';
+const CACHE = 'punch-v3';
 const FILES = ['.', 'index.html', 'punch.js', 'manifest.webmanifest', 'icon.svg'];
 
 self.addEventListener('install', (e) => {
@@ -12,5 +12,7 @@ self.addEventListener('activate', (e) => {
 // Cache first: offline is the only job, and the files only change when I redeploy
 // (bump CACHE to ship an update).
 self.addEventListener('fetch', (e) => {
+  // Sheets API and Google sign-in traffic goes straight to the network, never the cache.
+  if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return;
   e.respondWith(caches.match(e.request).then((hit) => hit ?? fetch(e.request)));
 });

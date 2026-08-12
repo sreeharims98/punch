@@ -60,11 +60,42 @@ export function totals(shift, now = Date.now()) {
   return { gross, breaks, net: gross - breaks, open };
 }
 
-// Inclusive date-range filter over shifts. Empty bound = open on that side.
-// dayKey strings are YYYY-MM-DD, so plain string compare is the right compare.
-export function inRange(list, from, to) {
-  return list.filter((s) => (!from || s.date >= from) && (!to || s.date <= to));
+// Spreadsheet-friendly: one row per event, local date and 24h local time.
+// ponytail: minute resolution — seconds are dropped, so a CSV round-trip can move a
+// timestamp by up to 59s. The JSON export stays the exact backup format.
+export function toCSV(events) {
+  const rows = [...events].sort((a, b) => a.t - b.t).map((e) => {
+    const d = new Date(e.t);
+    const hhmm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    return `${dayKey(e.t)},${hhmm},${KINDS[e.k]}`;
+  });
+  return ['Date,Time,Action', ...rows].join('\n');
 }
+
+const ROW = /^(\d{4})-(\d{2})-(\d{2}),(\d{2}):(\d{2}),(.+)$/;
+const KIND_OF = Object.fromEntries(Object.entries(KINDS).map(([k, label]) => [label, k]));
+
+// null on any bad row — a half-parsed log is worse than a rejected file.
+// Building the date from parts (not parsing a string) keeps it local and DST-correct.
+export function fromCSV(text) {
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (lines[0]?.startsWith('Date,')) lines.shift();
+
+  const out = [];
+  for (const line of lines) {
+    const m = ROW.exec(line);
+    const k = m && KIND_OF[m[6].trim()];
+    if (!k) return null;
+    out.push({ t: new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]).getTime(), k });
+  }
+  return out;
+}
+
+// The Sheets API speaks 2D arrays and we already speak CSV, and no column can hold a comma
+// (see toCSV). So the bridge is two joins, and the sheet-read path inherits every fromCSV
+// check instead of growing a second parser.
+export const toRows = (events) => toCSV(events).split('\n').map((l) => l.split(','));
+export const fromRows = (rows) => fromCSV((rows ?? []).map((r) => r.join(',')).join('\n'));
 
 export function dayKey(t) {
   const d = new Date(t);
