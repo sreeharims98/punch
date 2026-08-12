@@ -78,6 +78,18 @@
 
   h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 30px 0 8px 4px; }
 
+  .tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+  .tabs button { flex: 1; padding: 10px; font-size: 14px; color: var(--muted); }
+  .tabs button[aria-current] { color: var(--accent); border-color: var(--accent); }
+
+  .filter { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+  .filter input {
+    font: inherit; font-size: 14px; flex: 1; min-width: 0; padding: 9px 10px;
+    border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--text);
+  }
+  .filter button { padding: 9px 12px; font-size: 13px; font-weight: 500; color: var(--muted); }
+  #add { width: 100%; margin-bottom: 4px; padding: 13px; font-size: 14px; }
+
   details { border-bottom: 1px solid var(--line); }
   summary {
     display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
@@ -108,10 +120,11 @@
   }
   dialog::backdrop { background: #000a; }
   dialog h3 { margin: 0 0 14px; font-size: 16px; }
-  dialog input {
+  dialog input, dialog select {
     font: inherit; width: 100%; padding: 12px; border-radius: 12px;
     border: 1px solid var(--line); background: var(--bg); color: var(--text);
   }
+  dialog select { margin-bottom: 10px; }
   .row { display: flex; gap: 10px; margin-top: 16px; }
   .row button { flex: 1; padding: 13px; }
   .danger { color: #dc2626; border-color: #dc262633; }
@@ -119,29 +132,44 @@
 </head>
 <body>
 
-<div class="card">
-  <div class="top">
-    <span class="date" id="date"></span>
-    <span class="status"><span class="dot"></span><span id="stateLabel"></span></span>
-  </div>
-  <div class="net" id="net">0h 00m</div>
-  <div class="sub">
-    <span>in office <b id="gross">0h 00m</b></span>
-    <span>breaks <b id="breaks">0h 00m</b></span>
-  </div>
-  <div class="actions" id="actions"></div>
+<div class="tabs">
+  <button id="tabToday" aria-current="page">Today</button>
+  <button id="tabHistory">History</button>
 </div>
 
-<h2>History</h2>
-<div id="history"></div>
+<div id="todayView">
+  <div class="card">
+    <div class="top">
+      <span class="date" id="date"></span>
+      <span class="status"><span class="dot"></span><span id="stateLabel"></span></span>
+    </div>
+    <div class="net" id="net">0h 00m</div>
+    <div class="sub">
+      <span>in office <b id="gross">0h 00m</b></span>
+      <span>breaks <b id="breaks">0h 00m</b></span>
+    </div>
+    <div class="actions" id="actions"></div>
+  </div>
+</div>
 
-<div class="tools">
-  <button id="export">Export backup</button>
-  <button id="import">Import</button>
+<div id="historyView" hidden>
+  <div class="filter">
+    <input type="date" id="from" aria-label="From date">
+    <input type="date" id="to" aria-label="To date">
+    <button id="clear">Clear</button>
+  </div>
+  <button id="add">+ Add entry</button>
+  <div id="history"></div>
+
+  <div class="tools">
+    <button id="export">Export backup</button>
+    <button id="import">Import</button>
+  </div>
 </div>
 
 <dialog id="editor">
   <h3 id="editorTitle">Edit time</h3>
+  <select id="editorKind"></select>
   <input type="datetime-local" id="editorInput">
   <div class="row">
     <button class="danger" id="editorDelete">Delete</button>
@@ -151,7 +179,7 @@
 </dialog>
 
 <script type="module">
-import { shifts, totals, nextActions, state, fmt, dayKey, KINDS } from './punch.js';
+import { shifts, totals, nextActions, state, fmt, dayKey, inRange, KINDS } from './punch.js';
 
 const KEY = 'punch.events';
 const LABEL = { in: 'Punch In', bin: 'Break In', bout: 'Break Out', out: 'Punch Out' };
@@ -193,7 +221,7 @@ function render() {
     return b;
   }));
 
-  renderHistory(current ? all.slice(1) : all);
+  renderHistory(inRange(all, $('from').value, $('to').value));
   tick(current);
 
   clearInterval(ticker);
@@ -210,7 +238,8 @@ function tick(current) {
 function renderHistory(past) {
   const host = $('history');
   if (!past.length) {
-    host.innerHTML = '<div class="empty">No earlier days yet.</div>';
+    const filtered = $('from').value || $('to').value;
+    host.innerHTML = `<div class="empty">${filtered ? 'No days in this range.' : 'Nothing logged yet.'}</div>`;
     return;
   }
   host.replaceChildren(...past.map((s) => {
@@ -226,7 +255,7 @@ function renderHistory(past) {
       const b = document.createElement('button');
       b.className = 'ev';
       b.innerHTML = `<time>${clock(e.t)}</time><span>${KINDS[e.k]}</span><span class="pen">edit</span>`;
-      b.onclick = () => edit(e);
+      b.onclick = () => openEditor(e);
       return b;
     }));
     d.append(evs);
@@ -234,13 +263,21 @@ function renderHistory(past) {
   }));
 }
 
-function edit(ev) {
+// ev === null means "add a new entry" — the backfill path for a punch or break
+// that never got recorded. Deliberately skips the nextActions state machine:
+// that guards the buttons, this repairs a log the buttons could not produce.
+function openEditor(ev) {
   const dlg = $('editor');
-  $('editorTitle').textContent = KINDS[ev.k];
-  $('editorInput').value = toInput(ev.t);
+  $('editorTitle').textContent = ev ? KINDS[ev.k] : 'Add entry';
+  $('editorKind').value = ev ? ev.k : 'in';
+  $('editorInput').value = toInput(ev ? ev.t : Date.now());
+  $('editorDelete').hidden = !ev;
   $('editorSave').onclick = () => {
     const t = new Date($('editorInput').value).getTime();
-    if (!Number.isNaN(t)) { ev.t = t; save(events); }
+    const k = $('editorKind').value;
+    if (Number.isNaN(t)) return;
+    if (ev) { ev.t = t; ev.k = k; save(events); }
+    else save([...events, { t, k }]);
     dlg.close();
   };
   $('editorDelete').onclick = () => {
@@ -250,6 +287,29 @@ function edit(ev) {
   $('editorCancel').onclick = () => dlg.close();
   dlg.showModal();
 }
+
+$('editorKind').replaceChildren(...Object.entries(KINDS).map(([k, label]) => {
+  const o = document.createElement('option');
+  o.value = k;
+  o.textContent = label;
+  return o;
+}));
+
+$('add').onclick = () => openEditor(null);
+
+for (const el of [$('from'), $('to')]) el.oninput = render;
+$('clear').onclick = () => { $('from').value = $('to').value = ''; render(); };
+
+function showTab(history) {
+  $('todayView').hidden = history;
+  $('historyView').hidden = !history;
+  for (const [el, on] of [[$('tabToday'), !history], [$('tabHistory'), history]]) {
+    if (on) el.setAttribute('aria-current', 'page');
+    else el.removeAttribute('aria-current');
+  }
+}
+$('tabToday').onclick = () => showTab(false);
+$('tabHistory').onclick = () => showTab(true);
 
 $('export').onclick = () => {
   const a = document.createElement('a');

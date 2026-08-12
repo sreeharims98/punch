@@ -60,6 +60,12 @@ export function totals(shift, now = Date.now()) {
   return { gross, breaks, net: gross - breaks, open };
 }
 
+// Inclusive date-range filter over shifts. Empty bound = open on that side.
+// dayKey strings are YYYY-MM-DD, so plain string compare is the right compare.
+export function inRange(list, from, to) {
+  return list.filter((s) => (!from || s.date >= from) && (!to || s.date <= to));
+}
+
 export function dayKey(t) {
   const d = new Date(t);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

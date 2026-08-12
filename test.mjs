@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { shifts, totals, nextActions, state, fmt, dayKey } from './punch.js';
+import { shifts, totals, nextActions, state, fmt, dayKey, inRange } from './punch.js';
 
 const H = 3600000;
 const M = 60000;
@@ -96,6 +96,41 @@ assert.equal(state('out'), 'off');
 assert.equal(state('in'), 'working');
 assert.equal(state('bout'), 'working');
 assert.equal(state('bin'), 'break');
+
+// --- date-range filter -------------------------------------------------------
+{
+  const all = shifts([
+    { t: at(10, 9), k: 'in' }, { t: at(10, 17), k: 'out' },
+    { t: at(11, 9), k: 'in' }, { t: at(11, 17), k: 'out' },
+    { t: at(12, 9), k: 'in' }, { t: at(12, 17), k: 'out' },
+  ]);
+  const days = (list) => list.map((s) => s.date);
+
+  assert.deepEqual(days(inRange(all, '', '')), ['2026-08-12', '2026-08-11', '2026-08-10']);
+  assert.deepEqual(days(inRange(all, '2026-08-11', '2026-08-11')), ['2026-08-11']);
+  assert.deepEqual(days(inRange(all, '2026-08-11', '')), ['2026-08-12', '2026-08-11']);
+  assert.deepEqual(days(inRange(all, '', '2026-08-11')), ['2026-08-11', '2026-08-10']);
+  assert.deepEqual(inRange(all, '2026-09-01', ''), []);
+}
+
+// --- backfilling a forgotten punch-out closes the stale shift -----------------
+{
+  const log = [
+    { t: at(10, 9), k: 'in' },   // forgot to punch out this day
+    { t: at(11, 9), k: 'in' },
+    { t: at(11, 17), k: 'out' },
+  ];
+  const now = at(20, 12);
+  const before = shifts(log);
+  assert.equal(before.length, 2);
+  assert.equal(totals(before.find((s) => s.date === '2026-08-10'), now).open, true);
+
+  const fixed = shifts([...log, { t: at(10, 17), k: 'out' }]);
+  const day10 = totals(fixed.find((s) => s.date === '2026-08-10'), now);
+  assert.equal(day10.open, false);
+  assert.equal(day10.net, 8 * H);
+  assert.equal(totals(fixed.find((s) => s.date === '2026-08-11'), now).net, 8 * H);
+}
 
 // --- formatting --------------------------------------------------------------
 assert.equal(fmt(0), '0h 00m');
