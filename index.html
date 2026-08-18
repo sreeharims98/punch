@@ -129,6 +129,45 @@
                 font-variant-numeric: tabular-nums;
             }
 
+            /* Leave-at block: divider + list, so it reads as its own answer
+               rather than a fourth elapsed-time stat. */
+            #leave {
+                margin-top: 18px;
+                padding-top: 14px;
+                border-top: 1px solid var(--line);
+            }
+            .leaveHead {
+                font-size: 12px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.08em;
+                color: var(--muted);
+            }
+            .leaveHead b {
+                color: var(--accent);
+            }
+            .leaveList {
+                list-style: none;
+                margin: 10px 0 0;
+                padding: 0;
+                display: grid;
+                gap: 8px;
+            }
+            .leaveList li {
+                display: flex;
+                align-items: baseline;
+                justify-content: space-between;
+                gap: 12px;
+                font-size: 14px;
+                color: var(--muted);
+            }
+            .leaveList b {
+                font-weight: 600;
+                font-size: 18px;
+                color: var(--text);
+                font-variant-numeric: tabular-nums;
+            }
+
             /* Pinned so the punch buttons stay under the thumb, however long the day gets.
      Fixed, not sticky: sticky only pins once the page overflows, and a fresh day is short. */
             .actions {
@@ -373,9 +412,18 @@
                     <span>in office <b id="gross">0h 00m</b></span>
                     <span>breaks <b id="breaks">0h 00m</b></span>
                 </div>
-                <div class="sub" id="leave" hidden>
-                    <span>in office 8h <b id="leaveGross">—</b></span>
-                    <span>worked 8h <b id="leaveNet">—</b></span>
+                <div id="leave" hidden>
+                    <div class="leaveHead">Leave at <b>8h</b></div>
+                    <ul class="leaveList">
+                        <li>
+                            <span>including break</span>
+                            <b id="leaveGross">—</b>
+                        </li>
+                        <li>
+                            <span>excluding break</span>
+                            <b id="leaveNet">—</b>
+                        </li>
+                    </ul>
                 </div>
             </div>
 
@@ -394,7 +442,7 @@
                 <button id="export">Export JSON</button>
                 <button id="import">Import</button>
             </div>
-            <div class="version">Punch v3</div>
+            <div class="version">Punch v3.1</div>
         </div>
 
         <div id="cloudView" hidden>
@@ -500,7 +548,8 @@
                     ...nextActions(last).map((k, i) => {
                         const b = document.createElement("button");
                         b.textContent = LABEL[k];
-                        b.className = i === 0 ? "primary" : "";
+                        b.className =
+                            k === "out" ? "danger" : i === 0 ? "primary" : "";
                         b.onclick = () =>
                             save([...events, { t: Date.now(), k }]);
                         return b;

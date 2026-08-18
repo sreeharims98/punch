@@ -1,4 +1,4 @@
-const CACHE = 'punch-v3';
+const CACHE = 'punch-v3.1';
 const FILES = ['.', 'index.html', 'punch.js', 'manifest.webmanifest', 'icon.svg'];
 
 self.addEventListener('install', (e) => {
