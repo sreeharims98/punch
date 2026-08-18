@@ -106,3 +106,11 @@ export function fmt(ms) {
   const total = Math.max(0, Math.round(ms / 60000));
   return `${Math.floor(total / 60)}h ${String(total % 60).padStart(2, '0')}m`;
 }
+
+// When the shift hits `target`. `gross` counts break time toward the target,
+// `net` does not — so it slides later while a break is running.
+export function leaveAt(shift, target, now = Date.now()) {
+  if (!shift?.events.length) return null;
+  const { breaks } = totals(shift, now);
+  return { gross: shift.start + target, net: shift.start + target + breaks };
+}

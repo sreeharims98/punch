@@ -373,6 +373,10 @@
                     <span>in office <b id="gross">0h 00m</b></span>
                     <span>breaks <b id="breaks">0h 00m</b></span>
                 </div>
+                <div class="sub" id="leave" hidden>
+                    <span>in office 8h <b id="leaveGross">—</b></span>
+                    <span>worked 8h <b id="leaveNet">—</b></span>
+                </div>
             </div>
 
             <h2>Punches</h2>
@@ -413,6 +417,7 @@
             import {
                 shifts,
                 totals,
+                leaveAt,
                 nextActions,
                 state,
                 fmt,
@@ -425,6 +430,7 @@
             } from "./punch.js";
 
             const KEY = "punch.events";
+            const TARGET = 8 * 3600000;
             const LABEL = {
                 in: "Punch In",
                 bin: "Break In",
@@ -519,6 +525,16 @@
                 $("net").textContent = fmt(r.net);
                 $("gross").textContent = fmt(r.gross);
                 $("breaks").textContent = fmt(r.breaks);
+
+                const l =
+                    current && totals(current).open
+                        ? leaveAt(current, TARGET)
+                        : null;
+                $("leave").hidden = !l;
+                if (l) {
+                    $("leaveGross").textContent = clock(l.gross);
+                    $("leaveNet").textContent = clock(l.net);
+                }
             }
 
             // Read-only: History is where times get fixed.

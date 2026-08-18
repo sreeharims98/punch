@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { shifts, totals, nextActions, state, fmt, dayKey, toCSV, fromCSV, toRows, fromRows } from './punch.js';
+import { shifts, totals, nextActions, state, fmt, dayKey, toCSV, fromCSV, toRows, fromRows, leaveAt } from './punch.js';
 
 const H = 3600000;
 const M = 60000;
@@ -177,3 +177,15 @@ assert.deepEqual(fromRows([]), []);          // fresh sheet
 assert.deepEqual(fromRows(undefined), []);   // values API omits the key entirely when empty
 
 console.log('ok');
+
+// --- leaving time ------------------------------------------------------------
+{
+  const now = at(12, 12, 30);
+  const [s] = shifts([
+    { t: at(12, 9), k: 'in' },
+    { t: at(12, 12), k: 'bin' },   // 30m break still running
+  ]);
+  const l = leaveAt(s, 8 * H, now);
+  assert.equal(l.gross, at(12, 17));         // start + 8h
+  assert.equal(l.net, at(12, 17, 30));       // + 30m of break so far
+}
